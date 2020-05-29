@@ -50,7 +50,7 @@ MOSS <- R6Class("MOSS",
     max_num_interation = NULL,
     tmle_tolerance = NULL,
     k_grid = NULL,
-
+    which_A_update = "obs",
     q_best = NULL,
     initialize = function(
       A,
@@ -60,7 +60,8 @@ MOSS <- R6Class("MOSS",
       density_censor,
       g1W,
       A_intervene,
-      k_grid = NULL
+      k_grid = NULL,
+      which_A_update = "obs"
     ) {
       self$A <- A
       self$T_tilde <- T_tilde
@@ -69,7 +70,7 @@ MOSS <- R6Class("MOSS",
       self$density_censor <- density_censor
       self$g1W <- g1W
       self$A_intervene <- A_intervene
-
+      self$which_A_update <- which_A_update
       self$k_grid <- k_grid
       return(self)
     },
@@ -260,7 +261,7 @@ MOSS_hazard <- R6Class("MOSS_hazard",
     max_num_interation = NULL,
     tmle_tolerance = NULL,
     k_grid = NULL,
-
+    which_A_update = "obs",
     q_best = NULL,
     initialize = function(
       A,
@@ -270,7 +271,8 @@ MOSS_hazard <- R6Class("MOSS_hazard",
       density_censor,
       g1W,
       A_intervene = NULL,
-      k_grid = NULL
+      k_grid = NULL,
+      which_A_update = "obs"
     ) {
       self$A <- A
       self$T_tilde <- T_tilde
@@ -279,7 +281,7 @@ MOSS_hazard <- R6Class("MOSS_hazard",
       self$density_censor <- density_censor
       self$g1W <- g1W
       self$A_intervene <- A_intervene
-
+      self$which_A_update <- which_A_update
       self$k_grid <- k_grid
       return(self)
     },
@@ -292,10 +294,16 @@ MOSS_hazard <- R6Class("MOSS_hazard",
       }
       return(as.vector(t(dNt)))
     },
-    construct_long_data = function(A_intervene, density_failure, density_censor) {
+    construct_long_data = function(A_intervene, density_failure, density_censor, which_A = 'obs') {
       psi_n <- colMeans(density_failure$survival)
+      
+      if(which_A=="obs"){
+        A <- self$A
+      } else {
+        A <- self$A_intervene
+      }
       eic_fit <- eic$new(
-        A = self$A,
+        A = A,
         T_tilde = self$T_tilde,
         Delta = self$Delta,
         density_failure = density_failure,
@@ -364,9 +372,18 @@ MOSS_hazard <- R6Class("MOSS_hazard",
           return(rep(0, ncol(h_matrix)))
         })
       }
+
+      h_matrix_update <- self$construct_long_data(
+        A_intervene = self$A_intervene,
+        density_failure = self$density_failure,
+        density_censor = self$density_censor,
+        which_A = self$which_A_update
+      )
+      
+      cat(sprintf("h_matrix_update %f%% 0's\n",100*mean(h_matrix_update==0)))
       hazard_new <- expit(
         logit(as.vector(t(self$density_failure$hazard))) +
-        as.vector(h_matrix %*% epsilon_n)
+        as.vector(h_matrix_update %*% epsilon_n)
       )
       hazard_new <- matrix(
         hazard_new,
